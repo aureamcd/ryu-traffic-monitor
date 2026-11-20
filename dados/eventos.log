@@ -1,0 +1,6 @@
+2026-11-20T13:21:39  FASE1 ociosa (25s)
+2026-11-20T13:22:04  FASE2 ICMP: h1 ping h2 (10 pacotes)
+2026-11-20T13:22:13  FASE3 TCP: h2 iperf -s ; h1 iperf -c h2 -t 30 -i 2
+2026-11-20T13:22:30  FASE4 UDP simultaneo: h3 iperf -c h2 -u -b 10M -t 20
+2026-11-20T13:22:53  FASE5 ociosa final (15s)
+2026-11-20T13:23:08  FIM
