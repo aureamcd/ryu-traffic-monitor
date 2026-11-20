@@ -19,6 +19,7 @@ import os
 import subprocess
 import time
 
+from mininet.link import TCLink
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
 from mininet.topo import SingleSwitchTopo
@@ -29,20 +30,26 @@ def main():
     ap.add_argument('--out', default='resultados')
     ap.add_argument('--port', type=int, default=6653)
     ap.add_argument('--duration', type=int, default=30)
+    ap.add_argument('--udp-duration', type=int, default=30)
     ap.add_argument('--udp-bw', default='10M')
     ap.add_argument('--tcp-bw', default='',
-                    help='limite de banda do enlace TCP (ex.: 20M); vazio = sem limite')
-    ap.add_argument('--idle', type=int, default=25, help='segundos da fase ociosa')
+                    help='limite de banda do cliente TCP; vazio = sem limite')
+    ap.add_argument('--link-bw', type=float, default=20.0,
+                    help='capacidade dos enlaces em Mbit/s via TCLink (0 = sem limite)')
+    ap.add_argument('--idle', type=int, default=12, help='segundos da fase ociosa')
     ap.add_argument('--userspace', action='store_true',
                     help="usa datapath 'user' (ambientes sem modulo kernel do OVS)")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
     kw = {'datapath': 'user'} if args.userspace else {}
+    link_kw = {'link': TCLink} if args.link_bw > 0 else {}
+    topo = SingleSwitchTopo(k=3, **({'lopts': {'bw': args.link_bw}} if args.link_bw > 0 else {}))
     net = Mininet(
-        topo=SingleSwitchTopo(k=3), autoSetMacs=True,
+        topo=topo, autoSetMacs=True,
         controller=lambda n: RemoteController(n, ip='127.0.0.1', port=args.port),
-        switch=lambda n, **k: OVSSwitch(n, protocols='OpenFlow13', **dict(k, **kw)))
+        switch=lambda n, **k: OVSSwitch(n, protocols='OpenFlow13', **dict(k, **kw)),
+        **link_kw)
     net.start()
     h1, h2, h3 = net.get('h1', 'h2', 'h3')
     # O datapath em espaco de usuario do OVS nao recalcula checksums: sem isso o
@@ -77,13 +84,13 @@ def main():
         time.sleep(args.duration // 2)
 
         mark('FASE4 UDP simultaneo: h3 iperf -c h2 -u -b %s -t %d'
-             % (args.udp_bw, args.duration // 2 + 5))
+             % (args.udp_bw, args.udp_duration))
         h3.cmd('iperf -c %s -p 5002 -u -b %s -t %d -i 2 > %s/iperf_h3_udp.txt 2>&1 &'
-               % (h2.IP(), args.udp_bw, args.duration // 2 + 5, args.out))
-        time.sleep(args.duration // 2 + 8)
+               % (h2.IP(), args.udp_bw, args.udp_duration, args.out))
+        time.sleep(args.udp_duration + 3)
 
-        mark('FASE5 ociosa final (15s)')
-        time.sleep(15)
+        mark('FASE5 ociosa final (10s)')
+        time.sleep(10)
         flows = subprocess.check_output(
             ['ovs-ofctl', '-O', 'OpenFlow13', 'dump-flows', 's1']).decode()
         open(os.path.join(args.out, 'ovs_flows.txt'), 'w').write(flows)
